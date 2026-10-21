@@ -870,6 +870,21 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeAddToQueue:
 		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})
 		return nil, nil
+	case ApiRequestTypeSearch:
+		// Like the token, a search touches no player state.
+		data := req.Data.(ApiRequestDataSearch)
+		reply := apiReply(req)
+		spc := p.sess.Spclient()
+		p.goDetached(searchTimeout, func(ctx context.Context) {
+			res, err := spc.WebSearch(ctx, data.Query, data.Types, data.Limit, data.Offset)
+			if err != nil {
+				reply.done(nil, searchError(err))
+				return
+			}
+			reply.done(searchResults(res), nil)
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestTypeToken:
 		// Nothing here touches player state, so it is answered from its own
 		// goroutine rather than holding up the loop for a token renewal.

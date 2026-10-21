@@ -329,6 +329,102 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/libraryPlaylist'
+    searchItem:
+      x-go-name: ApiSearchItem
+      description: >-
+        One search result. Which of the optional fields are set depends on its
+        type.
+      type: object
+      required: [ uri, type, name ]
+      properties:
+        uri:
+          description: URI to play, as POST /player/play takes it
+          type: string
+        type:
+          description: >-
+            Item type: track, album, artist, playlist, show, episode or
+            audiobook
+          type: string
+        name:
+          description: Item name
+          type: string
+        artist_names:
+          description: >-
+            Artists of a track or album, or the authors of an audiobook
+          type: array
+          items:
+            type: string
+        album_name:
+          description: Album of a track
+          type: string
+        album_uri:
+          description: Album URI of a track
+          type: string
+        owner_name:
+          description: Display name of a playlist's owner
+          type: string
+        publisher:
+          description: Publisher of a show
+          type: string
+        duration_ms:
+          description: Duration of a track or episode in milliseconds
+          type: integer
+        release_date:
+          description: Release date of an album or episode, as precise as known
+          type: string
+        explicit:
+          description: Whether a track or episode is explicit
+          type: boolean
+        image_url:
+          description: Cover image URL, the largest available
+          type: string
+    searchPage:
+      x-go-name: ApiSearchPage
+      description: The results of one type
+      type: object
+      required: [ total, items ]
+      properties:
+        total:
+          description: Number of matches the Web API reports for this type
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchItem'
+    searchResults:
+      x-go-name: ApiSearchResults
+      description: >-
+        Search results per type; only the types asked for are present
+      type: object
+      properties:
+        tracks:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Tracks
+        albums:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Albums
+        artists:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Artists
+        playlists:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Playlists
+        shows:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Shows
+        episodes:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Episodes
+        audiobooks:
+          allOf:
+            - $ref: '#/components/schemas/searchPage'
+          x-go-name: Audiobooks
     libraryAlbum:
       x-go-name: ApiLibraryAlbum
       description: An album saved in the user's library
@@ -1061,6 +1157,68 @@ paths:
           description: The user may not read the playlist
         404:
           description: The playlist does not exist
+  /search:
+    get:
+      operationId: search
+      description: >-
+        Search the Spotify catalog as the logged in user, through the public
+        Web API's /v1/search with the session's own token, so no separate
+        login is needed. The answer is trimmed to what picking something to
+        play needs: every item carries its URI for POST /player/play. The Web
+        API is rate limited, and a 429 from it is passed on.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: >-
+            Search query; the Web API's field filters work too, like
+            artist:Queen or year:1980-1989
+          schema:
+            type: string
+            minLength: 1
+        - name: type
+          in: query
+          required: false
+          description: >-
+            Comma separated item types to search for, out of track, album,
+            artist, playlist, show, episode and audiobook
+          schema:
+            type: string
+            default: track,album,artist,playlist
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to return per type, from 1 to 10
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 5
+          x-go-type-skip-optional-pointer: true
+        - name: offset
+          in: query
+          required: false
+          description: Index of the first item to return per type, from 0 to 1000
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+            default: 0
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchResults'
+        204:
+          description: No active session
+        400:
+          description: The query is empty, or a type, limit or offset is invalid
+        429:
+          description: The Web API is rate limiting searches; try again later
   /player/play:
     post:
       operationId: playerPlay

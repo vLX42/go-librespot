@@ -142,6 +142,7 @@ const (
 	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
 	ApiRequestTypePlaylistRemoveTrack ApiRequestType = "playlist_remove_track"
 	ApiRequestTypePlaylistContains    ApiRequestType = "playlist_contains"
+	ApiRequestTypeSearch              ApiRequestType = "search"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
@@ -155,6 +156,14 @@ type ApiRequestDataContextTracks struct {
 type ApiRequestDataLibraryPage struct {
 	Offset int
 	Limit  int
+}
+
+// ApiRequestDataSearch carries the validated query parameters of a search.
+type ApiRequestDataSearch struct {
+	Query  string
+	Types  []string
+	Limit  int
+	Offset int
 }
 
 type ApiEventType string
@@ -580,6 +589,34 @@ func (s *ConcreteApiServer) handleLibraryPage(w http.ResponseWriter, r *http.Req
 
 func (s *ConcreteApiServer) GetLibraryPlaylists(w http.ResponseWriter, r *http.Request, params GetLibraryPlaylistsParams) {
 	s.handleLibraryPage(w, r, ApiRequestTypeLibraryPlaylists, params.Offset, params.Limit)
+}
+
+func (s *ConcreteApiServer) Search(w http.ResponseWriter, r *http.Request, params SearchParams) {
+	query := strings.TrimSpace(params.Q)
+
+	// The generated params cannot tell an absent type or limit from an empty
+	// one.
+	typeParam := params.Type
+	if !r.URL.Query().Has("type") {
+		typeParam = searchDefaultTypes
+	}
+	limit := params.Limit
+	if !r.URL.Query().Has("limit") {
+		limit = searchDefaultLimit
+	}
+
+	types, ok := parseSearchTypes(typeParam)
+	if query == "" || !ok || limit < 1 || limit > searchMaxLimit || params.Offset < 0 || params.Offset > searchMaxOffset {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSearch, Data: ApiRequestDataSearch{
+		Query:  query,
+		Types:  types,
+		Limit:  limit,
+		Offset: params.Offset,
+	}}, w)
 }
 
 func (s *ConcreteApiServer) GetLibraryAlbums(w http.ResponseWriter, r *http.Request, params GetLibraryAlbumsParams) {
