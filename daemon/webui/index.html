@@ -89,10 +89,10 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border: 0; bord
 
 /* tabs */
 nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; background: rgba(20,17,15,.92); backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-nav .in { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); }
+nav .in { max-width: 520px; margin: 0 auto; display: grid; grid-template-columns: repeat(2, 1fr); }
 nav button { padding: 14px 0 16px; font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); position: relative; }
 nav button[aria-selected=true] { color: var(--text); }
-nav button[aria-selected=true]::after { content: ""; position: absolute; left: 35%; right: 35%; top: -1px; height: 2px; background: var(--amber); box-shadow: 0 0 8px var(--amber-glow); }
+nav button[aria-selected=true]::after { content: ""; position: absolute; left: 38%; right: 38%; top: -1px; height: 2px; background: var(--amber); box-shadow: 0 0 8px var(--amber-glow); }
 [hidden] { display: none !important; }
 
 /* lists */
@@ -119,10 +119,6 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 4px 0
 .note.warn { color: var(--amber); }
 .grp { font-size: 11px; text-transform: uppercase; letter-spacing: .16em; color: var(--amber-dim); margin: 18px 8px 6px; }
 
-.search { position: relative; margin-bottom: 8px; }
-.search input { width: 100%; padding: 14px 16px 14px 42px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); outline: none; font-size: 16px; }
-.search input:focus { border-color: var(--amber-dim); }
-.search svg { position: absolute; left: 14px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; fill: var(--muted); }
 
 .toast { position: fixed; left: 50%; bottom: 84px; translate: -50% 0; z-index: 9; background: var(--panel-2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 999px; font-size: 12px; opacity: 0; transition: opacity .2s, translate .2s; pointer-events: none; max-width: calc(100% - 32px); }
 .toast.show { opacity: 1; translate: -50% -6px; }
@@ -143,7 +139,7 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 4px 0
     <div class="np">
       <div class="cover">
         <img id="cover" alt="" hidden>
-        <div class="empty" id="empty">Nothing playing.<br>Pick this speaker in Spotify, or start something from Library or Search.</div>
+        <div class="empty" id="empty">Nothing playing.<br>Pick this speaker in Spotify, or start something from Library.</div>
       </div>
       <div class="meta">
         <p class="title" id="title">&nbsp;</p>
@@ -180,21 +176,11 @@ h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin: 4px 0
     <button class="load" id="libmore" hidden>Load more</button>
   </section>
 
-  <!-- search -->
-  <section id="tab-search" hidden>
-    <h2>Search</h2>
-    <form class="search" id="searchform" autocomplete="off">
-      <svg viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg>
-      <input type="search" id="q" placeholder="Songs, artists, albums, podcasts" enterkeyhint="search">
-    </form>
-    <div id="results"></div>
-  </section>
 </div>
 
 <nav><div class="in" role="tablist">
   <button role="tab" data-tab="now" aria-selected="true">Playing</button>
   <button role="tab" data-tab="lib" aria-selected="false">Library</button>
-  <button role="tab" data-tab="search" aria-selected="false">Search</button>
 </div></nav>
 
 <div class="toast" id="toast"></div>
@@ -349,9 +335,8 @@ async function play(uri, skipTo) {
 // ---------- tabs ----------
 document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach((x) => x.setAttribute("aria-selected", x === b));
-  ["now", "lib", "search"].forEach((t) => $("tab-" + t).hidden = t !== b.dataset.tab);
+  ["now", "lib"].forEach((t) => $("tab-" + t).hidden = t !== b.dataset.tab);
   if (b.dataset.tab === "lib" && !libLoaded) loadLib(true);
-  if (b.dataset.tab === "search") $("q").focus();
   window.scrollTo(0, 0);
 }));
 
@@ -414,37 +399,6 @@ async function toggleTracks(uri, r, btn) {
     if (!tracks.length) box.append(el("div", "note", "No tracks."));
   } catch (e) { box.replaceChildren(el("div", "note warn", e.message)); }
 }
-
-// ---------- search ----------
-const GROUPS = [["tracks", "Songs"], ["artists", "Artists"], ["albums", "Albums"], ["playlists", "Playlists"], ["shows", "Podcasts"]];
-$("searchform").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const q = $("q").value.trim(); if (!q) return;
-  $("q").blur();
-  const out = $("results"); out.replaceChildren(el("div", "note", "Searching…"));
-  try {
-    const res = await api("GET", "/search?type=track,artist,album,playlist,show&limit=6&q=" + encodeURIComponent(q));
-    out.replaceChildren();
-    if (!res) { out.append(el("div", "note", "Not connected yet. Pick this speaker in the Spotify app once.")); return; }
-    for (const [key, label] of GROUPS) {
-      const items = (res[key] && res[key].items) || [];
-      if (!items.length) continue;
-      out.append(el("div", "grp", label));
-      const list = el("div", "list");
-      for (const it of items) {
-        let sub = "", onPlay = () => play(it.uri), onMore = null;
-        if (it.type === "track") { sub = [(it.artist_names || []).join(", "), it.album_name].filter(Boolean).join(" · "); if (it.album_uri) onPlay = () => play(it.album_uri, it.uri); }
-        else if (it.type === "album") { sub = (it.artist_names || []).join(", "); onMore = (r, b) => toggleTracks(it.uri, r, b); }
-        else if (it.type === "playlist") { sub = it.owner_name || ""; onMore = (r, b) => toggleTracks(it.uri, r, b); }
-        else if (it.type === "show") { sub = it.publisher || "Podcast"; onMore = (r, b) => toggleTracks(it.uri, r, b); }
-        else if (it.type === "artist") sub = "Artist";
-        list.append(row({ img: it.image_url, round: it.type === "artist", title: it.name, sub, onPlay, onMore }));
-      }
-      out.append(list);
-    }
-    if (!out.children.length) out.append(el("div", "note", "No results."));
-  } catch (e) { out.replaceChildren(el("div", "note warn", e.message)); }
-});
 
 refresh();
 connectEvents();

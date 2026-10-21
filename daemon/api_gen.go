@@ -264,64 +264,6 @@ type ApiRoot struct {
 	PlaybackReady bool `json:"playback_ready"`
 }
 
-// ApiSearchItem One search result. Which of the optional fields are set depends on its type.
-type ApiSearchItem struct {
-	// AlbumName Album of a track
-	AlbumName *string `json:"album_name,omitempty"`
-
-	// AlbumUri Album URI of a track
-	AlbumUri *string `json:"album_uri,omitempty"`
-
-	// ArtistNames Artists of a track or album, or the authors of an audiobook
-	ArtistNames *[]string `json:"artist_names,omitempty"`
-
-	// DurationMs Duration of a track or episode in milliseconds
-	DurationMs *int `json:"duration_ms,omitempty"`
-
-	// Explicit Whether a track or episode is explicit
-	Explicit *bool `json:"explicit,omitempty"`
-
-	// ImageUrl Cover image URL, the largest available
-	ImageUrl *string `json:"image_url,omitempty"`
-
-	// Name Item name
-	Name string `json:"name"`
-
-	// OwnerName Display name of a playlist's owner
-	OwnerName *string `json:"owner_name,omitempty"`
-
-	// Publisher Publisher of a show
-	Publisher *string `json:"publisher,omitempty"`
-
-	// ReleaseDate Release date of an album or episode, as precise as known
-	ReleaseDate *string `json:"release_date,omitempty"`
-
-	// Type Item type: track, album, artist, playlist, show, episode or audiobook
-	Type string `json:"type"`
-
-	// Uri URI to play, as POST /player/play takes it
-	Uri string `json:"uri"`
-}
-
-// ApiSearchPage The results of one type
-type ApiSearchPage struct {
-	Items []ApiSearchItem `json:"items"`
-
-	// Total Number of matches the Web API reports for this type
-	Total int `json:"total"`
-}
-
-// ApiSearchResults Search results per type; only the types asked for are present
-type ApiSearchResults struct {
-	Albums     *ApiSearchPage `json:"albums,omitempty"`
-	Artists    *ApiSearchPage `json:"artists,omitempty"`
-	Audiobooks *ApiSearchPage `json:"audiobooks,omitempty"`
-	Episodes   *ApiSearchPage `json:"episodes,omitempty"`
-	Playlists  *ApiSearchPage `json:"playlists,omitempty"`
-	Shows      *ApiSearchPage `json:"shows,omitempty"`
-	Tracks     *ApiSearchPage `json:"tracks,omitempty"`
-}
-
 // ApiSeek A seek payload
 type ApiSeek struct {
 	// Position Seek position in milliseconds. Must not be negative unless relative is set.
@@ -536,21 +478,6 @@ type PlaylistContainsParams struct {
 	Uris []string `form:"uris" json:"uris"`
 }
 
-// SearchParams defines parameters for Search.
-type SearchParams struct {
-	// Q Search query; the Web API's field filters work too, like artist:Queen or year:1980-1989
-	Q string `form:"q" json:"q"`
-
-	// Type Comma separated item types to search for, out of track, album, artist, playlist, show, episode and audiobook
-	Type string `form:"type,omitempty" json:"type,omitempty"`
-
-	// Limit Maximum number of items to return per type, from 1 to 10
-	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
-
-	// Offset Index of the first item to return per type, from 0 to 1000
-	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
 // SetLikedJSONRequestBody defines body for SetLiked for application/json ContentType.
 type SetLikedJSONRequestBody = ApiSetLiked
 
@@ -673,9 +600,6 @@ type ServerInterface interface {
 
 	// (POST /player/volume)
 	PlayerSetVolume(w http.ResponseWriter, r *http.Request)
-
-	// (GET /search)
-	Search(w http.ResponseWriter, r *http.Request, params SearchParams)
 
 	// (POST /set_device_name)
 	SetDeviceName(w http.ResponseWriter, r *http.Request)
@@ -1212,64 +1136,6 @@ func (siw *ServerInterfaceWrapper) PlayerSetVolume(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// Search operation middleware
-func (siw *ServerInterfaceWrapper) Search(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params SearchParams
-
-	// ------------- Required query parameter "q" -------------
-
-	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
-		return
-	}
-
-	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "type" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "type", r.URL.Query(), &params.Type)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "offset" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Search(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // SetDeviceName operation middleware
 func (siw *ServerInterfaceWrapper) SetDeviceName(w http.ResponseWriter, r *http.Request) {
 
@@ -1459,7 +1325,6 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/stop", wrapper.PlayerStop)
 	m.HandleFunc("GET "+options.BaseURL+"/player/volume", wrapper.PlayerGetVolume)
 	m.HandleFunc("POST "+options.BaseURL+"/player/volume", wrapper.PlayerSetVolume)
-	m.HandleFunc("GET "+options.BaseURL+"/search", wrapper.Search)
 	m.HandleFunc("POST "+options.BaseURL+"/set_device_name", wrapper.SetDeviceName)
 	m.HandleFunc("GET "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc("POST "+options.BaseURL+"/token", wrapper.GetToken)

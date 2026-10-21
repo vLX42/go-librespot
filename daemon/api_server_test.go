@@ -1050,56 +1050,6 @@ func TestApiSendToClosedClientGivesUp(t *testing.T) {
 	require.False(t, client.send(&librespot.NullLogger{}, &ApiEvent{Type: ApiEventTypeVolume}))
 }
 
-func TestApiSearch(t *testing.T) {
-	t.Run("defaults the type and paging", func(t *testing.T) {
-		ts := newTestServer(t, okReply)
-
-		resp := ts.do(http.MethodGet, "/search?q=+daft+punk+", nil)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-
-		req := ts.request()
-		require.Equal(t, ApiRequestTypeSearch, req.Type)
-		require.Equal(t, ApiRequestDataSearch{
-			Query:  "daft punk",
-			Types:  []string{"track", "album", "artist", "playlist"},
-			Limit:  5,
-			Offset: 0,
-		}, req.Data)
-	})
-
-	t.Run("forwards the parameters", func(t *testing.T) {
-		ts := newTestServer(t, okReply)
-
-		resp := ts.do(http.MethodGet, "/search?q=x&type=show,episode&limit=10&offset=1000", nil)
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, ApiRequestDataSearch{
-			Query:  "x",
-			Types:  []string{"show", "episode"},
-			Limit:  10,
-			Offset: 1000,
-		}, ts.request().Data)
-	})
-
-	for _, query := range []string{"", "q=", "q=+", "q=x&type=", "q=x&type=song", "q=x&limit=0", "q=x&limit=11", "q=x&offset=-1", "q=x&offset=1001"} {
-		t.Run("rejects "+query, func(t *testing.T) {
-			ts := newTestServer(t, okReply)
-
-			resp := ts.do(http.MethodGet, "/search?"+query, nil)
-			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-			ts.requireNoRequest()
-		})
-	}
-
-	t.Run("passes a rate limit on", func(t *testing.T) {
-		ts := newTestServer(t, func(ApiRequest) (any, error) {
-			return nil, searchError(&spclient.RateLimitedError{RetryAfter: time.Second})
-		})
-
-		resp := ts.do(http.MethodGet, "/search?q=x", nil)
-		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
-	})
-}
-
 func TestApiWebUI(t *testing.T) {
 	serve := func(t *testing.T, webUI bool) string {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
