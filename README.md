@@ -39,6 +39,8 @@
 
 ## Getting Started
 
+> Raspberry Pi 3 / 3B+ as a headless speaker over HDMI: see [deploy/rpi](deploy/rpi/README.md).
+
 ### Using prebuilt binary
 
 To get started you can download prebuilt binaries for
