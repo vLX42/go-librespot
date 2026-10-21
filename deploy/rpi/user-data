@@ -1,0 +1,39 @@
+#cloud-config
+hostname: stuen-deluxe
+manage_etc_hosts: true
+timezone: Europe/Copenhagen
+
+users:
+  - name: peter
+    groups: [adm, sudo, audio, video, plugdev, users, netdev]
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - __SSH_PUBKEY__
+
+enable_ssh: true
+ssh_pwauth: false
+
+package_update: true
+packages:
+  - avahi-daemon
+  - alsa-utils
+  - libasound2t64
+  - libogg0
+  - libvorbis0a
+  - libvorbisenc2
+  - libflac14
+  - libmpg123-0t64
+
+runcmd:
+  - [systemctl, enable, --now, ssh]
+  - [systemctl, disable, --now, hciuart, bluetooth, wpa_supplicant]
+  - [rfkill, block, all]
+  - [useradd, --system, --home-dir, /var/lib/go-librespot, --shell, /usr/sbin/nologin, golibrespot]
+  - [install, -d, -o, golibrespot, -g, golibrespot, -m, "0750", /var/lib/go-librespot]
+  - [install, -m, "0755", /boot/firmware/stuen/go-librespot, /usr/local/bin/go-librespot]
+  - [install, -o, golibrespot, -g, golibrespot, -m, "0640", /boot/firmware/stuen/config.yml, /var/lib/go-librespot/config.yml]
+  - [install, -m, "0644", /boot/firmware/stuen/go-librespot.service, /etc/systemd/system/go-librespot.service]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, avahi-daemon, go-librespot]

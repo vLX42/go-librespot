@@ -1,0 +1,22 @@
+[Unit]
+Description=go-librespot (Stuen Deluxe)
+Wants=network-online.target avahi-daemon.service
+After=network-online.target sound.target avahi-daemon.service
+
+[Service]
+User=golibrespot
+Group=golibrespot
+SupplementaryGroups=audio
+ExecStart=/usr/local/bin/go-librespot --config_dir /var/lib/go-librespot
+Restart=always
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/go-librespot
+
+[Install]
+WantedBy=multi-user.target

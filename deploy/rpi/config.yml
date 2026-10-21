@@ -1,0 +1,24 @@
+device_name: Stuen Deluxe
+device_type: speaker
+log_level: info
+
+audio_backend: alsa
+# HDMI out of the Pi 3 through the firmware audio driver (not KMS), into the receiver
+audio_device: "plughw:CARD=b1,DEV=0"
+
+zeroconf_enabled: true
+zeroconf_backend: avahi
+credentials:
+  type: zeroconf
+  zeroconf:
+    persist_credentials: true
+
+server:
+  enabled: true
+  address: 0.0.0.0
+  port: 80
+  web_ui: true
+
+metadata:
+  enabled: true
+  max_tracks: 500

@@ -1,0 +1,13 @@
+
+# Stuen Deluxe: never wake the TV over CEC, HDMI audio to the receiver even
+# when nothing reports a screen, and no radios (wired only).
+# The KMS overlay (vc4-kms-v3d) is commented out by prepare-card.sh: its HDMI
+# audio driver gave gaps on this receiver, the firmware one plays clean.
+hdmi_ignore_cec_init=1
+hdmi_force_hotplug=1
+hdmi_drive=2
+hdmi_force_edid_audio=1
+hdmi_blanking=1
+disable_splash=1
+dtoverlay=disable-wifi
+dtoverlay=disable-bt
