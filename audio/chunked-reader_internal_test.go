@@ -246,6 +246,42 @@ func TestCloseNormalizesBodyReadTransportErrors(t *testing.T) {
 	}
 }
 
+func TestFetchChunkRetriesABrokenOffBody(t *testing.T) {
+	var requests int
+	reader := newFetchTestReader(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		body := io.NopCloser(strings.NewReader("audio"))
+		if requests == 1 {
+			// The first answer breaks off mid-body, like a stalled CDN
+			// connection running into the client timeout.
+			body = io.NopCloser(readerFunc(func([]byte) (int, error) {
+				return 0, context.DeadlineExceeded
+			}))
+		}
+		return &http.Response{StatusCode: http.StatusPartialContent, Body: body, Header: http.Header{}}, nil
+	}))
+
+	data, err := reader.fetchChunk(0)
+	require.NoError(t, err)
+	require.Equal(t, []byte("audio"), data)
+	require.Equal(t, 2, requests)
+}
+
+func TestFetchChunkGivesUpOnABodyThatKeepsBreakingOff(t *testing.T) {
+	var requests int
+	reader := newFetchTestReader(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		body := io.NopCloser(readerFunc(func([]byte) (int, error) {
+			return 0, context.DeadlineExceeded
+		}))
+		return &http.Response{StatusCode: http.StatusPartialContent, Body: body, Header: http.Header{}}, nil
+	}))
+
+	_, err := reader.fetchChunk(0)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Equal(t, chunkReadAttempts, requests)
+}
+
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {

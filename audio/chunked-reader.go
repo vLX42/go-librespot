@@ -184,7 +184,29 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 	}, retryBackoff)
 }
 
+// chunkReadAttempts is how often a chunk whose body breaks off mid-read is
+// requested again. A stalled CDN connection usually recovers on a new request,
+// while giving up fails the whole load, as with a seek far into a long episode.
+const chunkReadAttempts = 3
+
 func (r *HttpChunkedReader) downloadAndRead(idx int) ([]byte, error) {
+	var err error
+	for attempt := 1; ; attempt++ {
+		var data []byte
+		data, err = r.downloadAndReadOnce(idx)
+		if err == nil {
+			return data, nil
+		}
+
+		if errors.Is(err, net.ErrClosed) || attempt >= chunkReadAttempts {
+			return nil, err
+		}
+
+		r.log.Debugf("retrying chunk %d after a failed read: %v", idx, err)
+	}
+}
+
+func (r *HttpChunkedReader) downloadAndReadOnce(idx int) ([]byte, error) {
 	resp, err := r.downloadChunk(idx)
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, r.closeErr(err))
