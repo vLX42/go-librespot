@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -437,6 +438,12 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 			}
 
 			if nn := C.snd_pcm_writei(pcmHandle, data, C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+				// The recovery below is silent, so an underrun would
+				// otherwise only be heard as a stutter.
+				if nn == -C.snd_pcm_sframes_t(syscall.EPIPE) {
+					out.log.Warnf("alsa underrun, the output ran out of audio")
+				}
+
 				// Got an error, so must recover (even for an underrun).
 				errCode := C.snd_pcm_recover(pcmHandle, C.int(nn), 1)
 				if errCode < 0 {
