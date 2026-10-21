@@ -252,10 +252,8 @@ func TestFetchChunkRetriesABrokenOffBody(t *testing.T) {
 		requests++
 		body := io.NopCloser(strings.NewReader("audio"))
 		if requests == 1 {
-			// The first answer breaks off mid-body, like a stalled CDN
-			// connection running into the client timeout.
 			body = io.NopCloser(readerFunc(func([]byte) (int, error) {
-				return 0, context.DeadlineExceeded
+				return 0, io.ErrUnexpectedEOF
 			}))
 		}
 		return &http.Response{StatusCode: http.StatusPartialContent, Body: body, Header: http.Header{}}, nil
@@ -267,19 +265,70 @@ func TestFetchChunkRetriesABrokenOffBody(t *testing.T) {
 	require.Equal(t, 2, requests)
 }
 
-func TestFetchChunkGivesUpOnABodyThatKeepsBreakingOff(t *testing.T) {
+func TestFetchChunkRetriesAStalledBody(t *testing.T) {
+	saved := chunkStallTimeout
+	chunkStallTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { chunkStallTimeout = saved })
+
 	var requests int
-	reader := newFetchTestReader(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+	reader := newFetchTestReader(t, roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		requests++
-		body := io.NopCloser(readerFunc(func([]byte) (int, error) {
-			return 0, context.DeadlineExceeded
-		}))
+		body := io.NopCloser(strings.NewReader("audio"))
+		if requests == 1 {
+			// The body never sends a byte, like a CDN connection that hangs
+			// after the 206.
+			body = io.NopCloser(readerFunc(func([]byte) (int, error) {
+				<-req.Context().Done()
+				return 0, req.Context().Err()
+			}))
+		}
 		return &http.Response{StatusCode: http.StatusPartialContent, Body: body, Header: http.Header{}}, nil
 	}))
 
+	data, err := reader.fetchChunk(0)
+	require.NoError(t, err)
+	require.Equal(t, []byte("audio"), data)
+	require.Equal(t, 2, requests)
+}
+
+func TestFetchChunkDoesNotMultiplyStatusRetries(t *testing.T) {
+	var requests int
+	reader := newFetchTestReader(t, roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}}, nil
+	}))
+
 	_, err := reader.fetchChunk(0)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Equal(t, chunkReadAttempts, requests)
+	var status *librespot.HTTPStatusError
+	require.ErrorAs(t, err, &status)
+	require.Equal(t, http.StatusForbidden, status.StatusCode)
+	require.Equal(t, 4, requests)
+}
+
+func TestNewReaderRetriesABrokenOffFirstChunk(t *testing.T) {
+	var requests int
+	client := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		requests++
+		body := io.NopCloser(strings.NewReader("audio"))
+		if requests == 1 {
+			body = io.NopCloser(readerFunc(func([]byte) (int, error) {
+				return 0, io.ErrUnexpectedEOF
+			}))
+		}
+		return &http.Response{
+			StatusCode: http.StatusPartialContent,
+			Body:       body,
+			Header:     http.Header{"Content-Range": []string{"bytes 0-4/5"}},
+		}, nil
+	})}
+
+	reader, err := NewHttpChunkedReader(&librespot.NullLogger{}, client, "https://example.com/audio")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = reader.Close() })
+
+	require.Equal(t, int64(5), reader.Size())
+	require.Equal(t, []byte("audio"), reader.chunks[0].data)
+	require.Equal(t, 2, requests)
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
