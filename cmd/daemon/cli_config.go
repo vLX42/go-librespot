@@ -74,6 +74,7 @@ type cliConfig struct {
 		AllowOrigin string `koanf:"allow_origin"`
 		CertFile    string `koanf:"cert_file"`
 		KeyFile     string `koanf:"key_file"`
+		WebUI       bool   `koanf:"web_ui"`
 
 		ImageSize string `koanf:"image_size"`
 	} `koanf:"server"`

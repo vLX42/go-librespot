@@ -42,6 +42,7 @@ type ConcreteApiServer struct {
 	allowOrigin string
 	certFile    string
 	keyFile     string
+	webUI       bool
 
 	// close is read by the websocket loop and by serve while Close writes it
 	// from whichever goroutine shuts the daemon down.
@@ -423,8 +424,8 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string) (_ ApiServer, err error) {
-	s := &ConcreteApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
+func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string, webUI bool) (_ ApiServer, err error) {
+	s := &ConcreteApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile, webUI: webUI}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -925,6 +926,9 @@ func (s *ConcreteApiServer) GetEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
+	if s.webUI {
+		handleWebUI(m)
+	}
 	handler := HandlerFromMux(s, m)
 
 	c := cors.New(cors.Options{

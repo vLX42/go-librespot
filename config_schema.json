@@ -160,6 +160,11 @@
               "description": "File path of the private key file to use for TLS",
               "default": ""
             },
+            "web_ui": {
+              "type": "boolean",
+              "description": "Whether to serve a small web interface for the player at /ui/ on the API server",
+              "default": false
+            },
             "image_size": {
               "type": "string",
               "description": "The preferred size of album cover images served by the API server",

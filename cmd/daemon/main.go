@@ -48,7 +48,7 @@ func main() {
 	var apiServer daemon.ApiServer
 	if cfg.Server.Enabled {
 		var err error
-		apiServer, err = daemon.NewApiServer(logEntry, cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile)
+		apiServer, err = daemon.NewApiServer(logEntry, cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile, cfg.Server.WebUI)
 		if err != nil {
 			logger.WithError(err).Fatal("failed creating api server")
 		}

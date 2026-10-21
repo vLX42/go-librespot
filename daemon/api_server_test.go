@@ -1099,3 +1099,29 @@ func TestApiSearch(t *testing.T) {
 		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 	})
 }
+
+func TestApiWebUI(t *testing.T) {
+	serve := func(t *testing.T, webUI bool) string {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+
+		s := &ConcreteApiServer{log: &librespot.NullLogger{}, listener: listener, requests: make(chan ApiRequest), webUI: webUI}
+		go s.serve()
+		t.Cleanup(func() { _ = s.Close() })
+		return "http://" + listener.Addr().String()
+	}
+
+	t.Run("serves the page when enabled", func(t *testing.T) {
+		resp, err := http.Get(serve(t, true) + "/ui")
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Contains(t, resp.Header.Get("Content-Type"), "text/html")
+		require.Contains(t, body(t, resp), `new WebSocket(`)
+	})
+
+	t.Run("is not there when disabled", func(t *testing.T) {
+		resp, err := http.Get(serve(t, false) + "/ui/")
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
