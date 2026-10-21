@@ -59,6 +59,36 @@ func TestStatePushCoalescesConsecutivePlayerState(t *testing.T) {
 	require.Equal(t, uint64(4), queued[0].seq, "the newest state wins")
 }
 
+// Dragging a volume slider sends a push per step; only the last one matters.
+func TestStatePushCoalescesConsecutiveVolume(t *testing.T) {
+	l := newTestStatePushLane(nil)
+
+	for seq := range uint64(5) {
+		l.submit(push(seq, connectpb.PutStateReason_VOLUME_CHANGED))
+	}
+
+	queued := drain(l)
+	require.Len(t, queued, 1)
+	require.Equal(t, uint64(4), queued[0].seq, "the newest volume wins")
+}
+
+// A volume push does not swallow a player-state push or the other way round:
+// each keeps the reason the backend is told.
+func TestStatePushCoalescesOnlyTheSameReason(t *testing.T) {
+	l := newTestStatePushLane(nil)
+
+	l.submit(push(1, connectpb.PutStateReason_PLAYER_STATE_CHANGED))
+	l.submit(push(2, connectpb.PutStateReason_VOLUME_CHANGED))
+	l.submit(push(3, connectpb.PutStateReason_VOLUME_CHANGED))
+	l.submit(push(4, connectpb.PutStateReason_PLAYER_STATE_CHANGED))
+
+	queued := drain(l)
+	require.Len(t, queued, 3)
+	require.Equal(t, uint64(1), queued[0].seq)
+	require.Equal(t, uint64(3), queued[1].seq)
+	require.Equal(t, uint64(4), queued[2].seq)
+}
+
 // Every other reason marks a transition the backend has to see, and in order.
 func TestStatePushKeepsTransitions(t *testing.T) {
 	l := newTestStatePushLane(nil)
@@ -84,7 +114,7 @@ func TestStatePushOverflowDropsSupersededState(t *testing.T) {
 
 	l.submit(push(1, connectpb.PutStateReason_PLAYER_STATE_CHANGED))
 	for seq := uint64(2); seq <= uint64(statePushQueueSize+1); seq++ {
-		l.submit(push(seq, connectpb.PutStateReason_VOLUME_CHANGED))
+		l.submit(push(seq, connectpb.PutStateReason_NEW_DEVICE))
 	}
 
 	queued := drain(l)

@@ -239,7 +239,7 @@ func (p *AppPlayer) initState() {
 				SupportsPlaylistV2:         true,
 				IsControllable:             true,
 				SupportsExternalEpisodes:   false, // TODO: support external episodes
-				SupportsSetBackendMetadata: true,
+				SupportsSetBackendMetadata: false, // TODO: handle set_backend_metadata
 				SupportsTransferCommand:    true,
 				SupportsCommandRequest:     true,
 				IsVoiceEnabled:             false,
@@ -350,6 +350,11 @@ func contextMetadata(fromCommand, fromResolver map[string]string) map[string]str
 // goroutine, and never blocks: the state is marshalled here so that the lane
 // carries bytes rather than protos this loop goes on mutating.
 func (p *AppPlayer) pushState(reason connectpb.PutStateReason) {
+	if p.skipsStatePush(reason) {
+		p.app.log.Tracef("not sending put state %s: the cluster needs no state updates", reason)
+		return
+	}
+
 	p.stateSeq++
 	push := statePush{seq: p.stateSeq, reason: reason, spotConnId: p.spotConnId}
 
@@ -363,6 +368,36 @@ func (p *AppPlayer) pushState(reason connectpb.PutStateReason) {
 	}
 
 	p.statePush.submit(push)
+}
+
+// skipsStatePush reports whether a push may be left out because the backend
+// said it needs no state updates. Spotify's own clients leave out the
+// player-state and volume pushes then; every other reason is a transition the
+// backend has to see. An active device always reports, since the controllers
+// follow playback through it.
+func (p *AppPlayer) skipsStatePush(reason connectpb.PutStateReason) bool {
+	if !p.stateUpdatesUnneeded || p.state.active {
+		return false
+	}
+	return reason == connectpb.PutStateReason_PLAYER_STATE_CHANGED ||
+		reason == connectpb.PutStateReason_VOLUME_CHANGED
+}
+
+// applyNeedsStateUpdates follows the needs_state_updates setting of a cluster,
+// from a cluster update or a put state response. A cluster that leaves it out
+// changes nothing. When the backend asks for updates again it gets the current
+// state at once, as Spotify's own clients send it.
+func (p *AppPlayer) applyNeedsStateUpdates(needs *bool) {
+	if needs == nil || *needs != p.stateUpdatesUnneeded {
+		return
+	}
+
+	p.stateUpdatesUnneeded = !*needs
+	p.app.log.Debugf("cluster setting changed for needs_state_updates: %t", *needs)
+
+	if *needs && p.hasSpotConnId {
+		p.pushState(connectpb.PutStateReason_PLAYER_STATE_CHANGED)
+	}
 }
 
 func (p *AppPlayer) buildStateRequest(reason connectpb.PutStateReason) *connectpb.PutStateRequest {
@@ -415,6 +450,7 @@ func (p *AppPlayer) applyStatePushResult(res statePushResult) {
 	}
 
 	p.stateRetries = 0
+	p.applyNeedsStateUpdates(res.needsStateUpdates)
 
 	// Any push registers the device, so playback readiness does not hinge on
 	// the initial one in particular having got through.

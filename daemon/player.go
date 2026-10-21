@@ -88,6 +88,10 @@ type AppPlayer struct {
 	stateRetries      int
 	stateSeq          uint64
 
+	// stateUpdatesUnneeded follows the cluster's needs_state_updates: set while
+	// the backend says it wants no player-state or volume pushes from us.
+	stateUpdatesUnneeded bool
+
 	spotConnId string
 
 	prodInfo *ProductInfo
@@ -227,6 +231,9 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		p.hasSpotConnId = p.spotConnId != ""
+		// A new connection starts from what the backend knows of it, which is
+		// nothing yet: report everything until a cluster says otherwise.
+		p.stateUpdatesUnneeded = false
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
 
 		p.pushState(connectpb.PutStateReason_NEW_DEVICE)
@@ -256,6 +263,10 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		var clusterUpdate connectpb.ClusterUpdate
 		if err := proto.Unmarshal(msg.Payload, &clusterUpdate); err != nil {
 			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
+		}
+
+		if cluster := clusterUpdate.GetCluster(); cluster != nil {
+			p.applyNeedsStateUpdates(cluster.NeedsStateUpdates)
 		}
 
 		if !p.state.active {

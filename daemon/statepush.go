@@ -36,10 +36,12 @@ type statePush struct {
 }
 
 // coalesces reports whether a push may be dropped in favour of a later one.
-// Only the ordinary player-state pushes may: every other reason marks a
+// Only the ordinary player-state and volume pushes may, the volume ones so that
+// dragging a slider does not send a push per step: every other reason marks a
 // transition the backend has to see in order.
 func (p statePush) coalesces() bool {
-	return p.reason == connectpb.PutStateReason_PLAYER_STATE_CHANGED
+	return p.reason == connectpb.PutStateReason_PLAYER_STATE_CHANGED ||
+		p.reason == connectpb.PutStateReason_VOLUME_CHANGED
 }
 
 type statePushResult struct {
@@ -47,6 +49,9 @@ type statePushResult struct {
 	reason   connectpb.PutStateReason
 	publicIp string
 	err      error
+
+	// needsStateUpdates is the cluster setting the response carried, if any.
+	needsStateUpdates *bool
 }
 
 // statePushLane owns the connect-state PUT. It exists so that a stalled push
@@ -104,7 +109,9 @@ func (l *statePushLane) submit(push statePush) {
 		return
 	}
 
-	if n := len(l.queue); n > 0 && l.queue[n-1].coalesces() && push.coalesces() {
+	// Each push carries the whole state, so a later one of the same reason
+	// supersedes the one before it.
+	if n := len(l.queue); n > 0 && l.queue[n-1].coalesces() && push.coalesces() && l.queue[n-1].reason == push.reason {
 		l.queue[n-1] = push
 	} else {
 		l.queue = append(l.queue, push)
@@ -171,6 +178,9 @@ func (l *statePushLane) run() {
 		cancel()
 
 		res := statePushResult{seq: push.seq, reason: push.reason, err: err}
+		if cluster != nil {
+			res.needsStateUpdates = cluster.NeedsStateUpdates
+		}
 		if device := cluster.GetDevice()[l.deviceId]; device != nil {
 			res.publicIp = device.PublicIp
 		}
