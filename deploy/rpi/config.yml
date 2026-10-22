@@ -5,6 +5,8 @@ log_level: info
 audio_backend: alsa
 # HDMI out of the Pi 3 through the firmware audio driver (not KMS), into the receiver
 audio_device: "plughw:CARD=b1,DEV=0"
+# same quality as the official clients on "Very high", the default is 160
+bitrate: 320
 
 zeroconf_enabled: true
 zeroconf_backend: avahi
