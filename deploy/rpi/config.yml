@@ -7,6 +7,10 @@ audio_backend: alsa
 audio_device: "plughw:CARD=b1,DEV=0"
 # same quality as the official clients on "Very high", the default is 160
 bitrate: 320
+# full-level stereo into the receiver, like its own Spotify: no loudness
+# normalisation and no software volume, the receiver does the volume
+normalisation_disabled: true
+external_volume: true
 
 zeroconf_enabled: true
 zeroconf_backend: avahi
